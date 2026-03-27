@@ -44,7 +44,14 @@ export default function PlanPage({ params }: { params: { id: string } }) {
             <StatusBadge status={plan.status} />
           </div>
         </div>
-        <PlanActions plan={plan} />
+        <div className="flex gap-2 flex-wrap">
+          {plan.status === 'draft' && (
+            <Link href={`/plans/${plan.id}/edit`} className="btn-secondary text-sm">
+              Edit
+            </Link>
+          )}
+          <PlanActions plan={plan} />
+        </div>
       </div>
 
       {/* Quarterly theme banner */}

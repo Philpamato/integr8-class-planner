@@ -22,14 +22,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <span className="font-semibold text-lg tracking-tight">Class Planner</span>
               </Link>
               <nav className="flex items-center gap-6 text-sm">
+                <Link href="/schedule" className="text-gray-300 hover:text-white transition-colors">
+                  Schedule
+                </Link>
                 <Link href="/plans" className="text-gray-300 hover:text-white transition-colors">
                   Plans
                 </Link>
-                <Link href="/plans/new" className="text-gray-300 hover:text-white transition-colors">
-                  + New Plan
-                </Link>
                 <Link href="/drills" className="text-gray-300 hover:text-white transition-colors">
-                  Drill Library
+                  Drills
+                </Link>
+                <Link href="/plans/new" className="bg-palestra hover:bg-blue-700 text-white px-3 py-1.5 rounded-md transition-colors">
+                  + New Plan
                 </Link>
               </nav>
             </div>
