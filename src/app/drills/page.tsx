@@ -1,5 +1,5 @@
-import { getDb } from '@/lib/db';
-import type { Drill, Style, DrillFocus } from '@/lib/types';
+import { drillsDb } from '@/lib/db';
+import type { Style, DrillFocus } from '@/lib/types';
 import AddDrillForm from '@/components/AddDrillForm';
 
 const STYLES: (Style | 'General')[] = ['General', 'Karate', 'Boxing', 'BJJ', 'MMA', 'Muay Thai'];
@@ -22,23 +22,16 @@ export default function DrillsPage({
 }: {
   searchParams: { style?: string; focus?: string; difficulty?: string };
 }) {
-  const db = getDb();
+  let drills = drillsDb.all();
+  if (searchParams.style)      drills = drills.filter(d => d.style === searchParams.style || d.style === 'General');
+  if (searchParams.focus)      drills = drills.filter(d => d.focus === searchParams.focus);
+  if (searchParams.difficulty) drills = drills.filter(d => d.difficulty === searchParams.difficulty);
 
-  let query = 'SELECT * FROM drills WHERE 1=1';
-  const params: string[] = [];
-  if (searchParams.style)      { query += ' AND (style = ? OR style = \'General\')'; params.push(searchParams.style); }
-  if (searchParams.focus)      { query += ' AND focus = ?';      params.push(searchParams.focus); }
-  if (searchParams.difficulty) { query += ' AND difficulty = ?'; params.push(searchParams.difficulty); }
-  query += ' ORDER BY style, focus, name';
-
-  const drills = db.prepare(query).all(...params) as Drill[];
-
-  // Group by style
   const grouped = STYLES.reduce((acc, s) => {
     const matching = drills.filter(d => d.style === s);
     if (matching.length > 0) acc[s] = matching;
     return acc;
-  }, {} as Record<string, Drill[]>);
+  }, {} as Record<string, typeof drills>);
 
   return (
     <div className="space-y-6">
@@ -66,13 +59,11 @@ export default function DrillsPage({
         <button type="submit" className="btn-secondary text-sm">Filter</button>
       </form>
 
-      {/* Add drill form */}
       <AddDrillForm />
 
-      {/* Drill groups */}
       {Object.keys(grouped).length === 0 ? (
         <div className="card p-8 text-center text-gray-400 text-sm">
-          No drills found. Adjust the filters or run <code className="bg-gray-100 px-1 rounded">npm run db:seed</code> to populate the library.
+          No drills found. Run <code className="bg-gray-100 px-1 rounded">npm run db:seed</code> to populate the library, or add drills above.
         </div>
       ) : (
         Object.entries(grouped).map(([style, styleDrills]) => (

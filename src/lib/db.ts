@@ -1,59 +1,100 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+/**
+ * Simple JSON file store — no native compilation needed.
+ * Data is persisted in /data/drills.json and /data/plans.json.
+ */
 import fs from 'fs';
+import path from 'path';
+import type { Drill, ClassPlanRow } from './types';
 
-const DB_PATH = path.join(process.cwd(), 'data', 'integr8.db');
+const DATA_DIR = path.join(process.cwd(), 'data');
 
-// Ensure data directory exists
-const dataDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+function ensureDir() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-let _db: Database.Database | null = null;
-
-export function getDb(): Database.Database {
-  if (_db) return _db;
-
-  _db = new Database(DB_PATH);
-  _db.pragma('journal_mode = WAL');
-  _db.pragma('foreign_keys = ON');
-
-  initSchema(_db);
-  return _db;
+function readJson<T>(file: string): T[] {
+  ensureDir();
+  const p = path.join(DATA_DIR, file);
+  if (!fs.existsSync(p)) return [];
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf-8'));
+  } catch {
+    return [];
+  }
 }
 
-function initSchema(db: Database.Database) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS drills (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      name        TEXT    NOT NULL,
-      style       TEXT    NOT NULL DEFAULT 'General',
-      focus       TEXT    NOT NULL,
-      difficulty  TEXT    NOT NULL DEFAULT 'beginner',
-      duration    INTEGER NOT NULL DEFAULT 5,
-      instructions TEXT   NOT NULL DEFAULT '',
-      equipment   TEXT    NOT NULL DEFAULT '',
-      createdAt   TEXT    NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS plans (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      title           TEXT    NOT NULL,
-      coachName       TEXT    NOT NULL,
-      location        TEXT    NOT NULL,
-      ageGroup        TEXT    NOT NULL,
-      style           TEXT    NOT NULL,
-      quarterlyTheme  TEXT    NOT NULL,
-      classDuration   INTEGER NOT NULL DEFAULT 60,
-      focusNotes      TEXT    NOT NULL DEFAULT '',
-      phases          TEXT    NOT NULL DEFAULT '[]',
-      status          TEXT    NOT NULL DEFAULT 'draft',
-      weekStart       TEXT    NOT NULL,
-      submittedAt     TEXT,
-      approvedAt      TEXT,
-      createdAt       TEXT    NOT NULL DEFAULT (datetime('now')),
-      updatedAt       TEXT    NOT NULL DEFAULT (datetime('now'))
-    );
-  `);
+function writeJson<T>(file: string, data: T[]) {
+  ensureDir();
+  fs.writeFileSync(path.join(DATA_DIR, file), JSON.stringify(data, null, 2), 'utf-8');
 }
+
+function nextId<T extends { id: number }>(items: T[]): number {
+  return items.length === 0 ? 1 : Math.max(...items.map(i => i.id)) + 1;
+}
+
+// ─── Drills ──────────────────────────────────────────────────────────────────
+
+export const drillsDb = {
+  all(): Drill[] {
+    return readJson<Drill>('drills.json');
+  },
+
+  find(id: number): Drill | undefined {
+    return this.all().find(d => d.id === id);
+  },
+
+  filter(predicate: (d: Drill) => boolean): Drill[] {
+    return this.all().filter(predicate);
+  },
+
+  insert(data: Omit<Drill, 'id' | 'createdAt'>): Drill {
+    const drills = this.all();
+    const drill: Drill = {
+      ...data,
+      id: nextId(drills),
+      createdAt: new Date().toISOString(),
+    };
+    writeJson('drills.json', [...drills, drill]);
+    return drill;
+  },
+
+  count(): number {
+    return this.all().length;
+  },
+};
+
+// ─── Plans ───────────────────────────────────────────────────────────────────
+
+export const plansDb = {
+  all(): ClassPlanRow[] {
+    return readJson<ClassPlanRow>('plans.json');
+  },
+
+  find(id: number): ClassPlanRow | undefined {
+    return this.all().find(p => p.id === id);
+  },
+
+  filter(predicate: (p: ClassPlanRow) => boolean): ClassPlanRow[] {
+    return this.all().filter(predicate);
+  },
+
+  insert(data: Omit<ClassPlanRow, 'id'>): ClassPlanRow {
+    const plans = this.all();
+    const plan: ClassPlanRow = { ...data, id: nextId(plans) };
+    writeJson('plans.json', [...plans, plan]);
+    return plan;
+  },
+
+  update(id: number, patch: Partial<ClassPlanRow>): ClassPlanRow | undefined {
+    const plans = this.all();
+    const idx = plans.findIndex(p => p.id === id);
+    if (idx === -1) return undefined;
+    plans[idx] = { ...plans[idx], ...patch };
+    writeJson('plans.json', plans);
+    return plans[idx];
+  },
+
+  delete(id: number) {
+    writeJson('plans.json', this.all().filter(p => p.id !== id));
+  },
+};

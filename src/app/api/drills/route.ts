@@ -1,35 +1,26 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
-import type { Drill } from '@/lib/types';
+import { drillsDb } from '@/lib/db';
+import type { Drill, Style, DrillFocus } from '@/lib/types';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const style = searchParams.get('style');
-  const focus = searchParams.get('focus');
+  const style = searchParams.get('style') as Style | null;
+  const focus = searchParams.get('focus') as DrillFocus | null;
   const difficulty = searchParams.get('difficulty');
 
-  const db = getDb();
-  let query = 'SELECT * FROM drills WHERE 1=1';
-  const params: string[] = [];
+  let drills = drillsDb.all();
+  if (style)      drills = drills.filter(d => d.style === style || d.style === 'General');
+  if (focus)      drills = drills.filter(d => d.focus === focus);
+  if (difficulty) drills = drills.filter(d => d.difficulty === difficulty);
 
-  if (style) { query += ' AND (style = ? OR style = \'General\')'; params.push(style); }
-  if (focus) { query += ' AND focus = ?'; params.push(focus); }
-  if (difficulty) { query += ' AND difficulty = ?'; params.push(difficulty); }
-
-  query += ' ORDER BY style, focus, name';
-
-  const drills = db.prepare(query).all(...params) as Drill[];
+  drills.sort((a, b) => `${a.style}${a.focus}${a.name}`.localeCompare(`${b.style}${b.focus}${b.name}`));
   return NextResponse.json(drills);
 }
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const db = getDb();
 
-  const result = db.prepare(`
-    INSERT INTO drills (name, style, focus, difficulty, duration, instructions, equipment)
-    VALUES (@name, @style, @focus, @difficulty, @duration, @instructions, @equipment)
-  `).run({
+  const drill = drillsDb.insert({
     name: body.name,
     style: body.style ?? 'General',
     focus: body.focus,
@@ -39,6 +30,5 @@ export async function POST(request: Request) {
     equipment: body.equipment ?? '',
   });
 
-  const drill = db.prepare('SELECT * FROM drills WHERE id = ?').get(result.lastInsertRowid) as Drill;
   return NextResponse.json(drill, { status: 201 });
 }

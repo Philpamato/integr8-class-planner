@@ -1,53 +1,35 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { plansDb } from '@/lib/db';
 import { generatePlan } from '@/lib/generator';
 import type { ClassPlan, ClassPlanRow, CreatePlanInput } from '@/lib/types';
 
 function rowToPlan(row: ClassPlanRow): ClassPlan {
-  return { ...row, phases: JSON.parse(row.phases) };
+  return { ...row, phases: typeof row.phases === 'string' ? JSON.parse(row.phases) : row.phases };
 }
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const location = searchParams.get('location');
-  const status = searchParams.get('status');
+  const location  = searchParams.get('location');
+  const status    = searchParams.get('status');
   const coachName = searchParams.get('coachName');
 
-  const db = getDb();
-  let query = 'SELECT * FROM plans WHERE 1=1';
-  const params: string[] = [];
+  let rows = plansDb.all();
+  if (location)  rows = rows.filter(p => p.location === location);
+  if (status)    rows = rows.filter(p => p.status === status);
+  if (coachName) rows = rows.filter(p => p.coachName === coachName);
 
-  if (location) { query += ' AND location = ?'; params.push(location); }
-  if (status)   { query += ' AND status = ?';   params.push(status); }
-  if (coachName) { query += ' AND coachName = ?'; params.push(coachName); }
-
-  query += ' ORDER BY weekStart DESC, createdAt DESC';
-
-  const rows = db.prepare(query).all(...params) as ClassPlanRow[];
+  rows.sort((a, b) => b.weekStart.localeCompare(a.weekStart) || b.createdAt.localeCompare(a.createdAt));
   return NextResponse.json(rows.map(rowToPlan));
 }
 
 export async function POST(request: Request) {
   const body: CreatePlanInput = await request.json();
-  const db = getDb();
-
   const { phases, theme, title } = generatePlan(
-    body.style,
-    body.ageGroup,
-    body.classDuration,
-    body.focusNotes,
-    body.weekStart
+    body.style, body.ageGroup, body.classDuration, body.focusNotes, body.weekStart
   );
 
   const now = new Date().toISOString();
-  const result = db.prepare(`
-    INSERT INTO plans
-      (title, coachName, location, ageGroup, style, quarterlyTheme, classDuration,
-       focusNotes, phases, status, weekStart, createdAt, updatedAt)
-    VALUES
-      (@title, @coachName, @location, @ageGroup, @style, @quarterlyTheme, @classDuration,
-       @focusNotes, @phases, 'draft', @weekStart, @createdAt, @updatedAt)
-  `).run({
+  const row = plansDb.insert({
     title,
     coachName: body.coachName,
     location: body.location,
@@ -57,11 +39,13 @@ export async function POST(request: Request) {
     classDuration: body.classDuration,
     focusNotes: body.focusNotes,
     phases: JSON.stringify(phases),
+    status: 'draft',
     weekStart: body.weekStart,
+    submittedAt: null,
+    approvedAt: null,
     createdAt: now,
     updatedAt: now,
   });
 
-  const row = db.prepare('SELECT * FROM plans WHERE id = ?').get(result.lastInsertRowid) as ClassPlanRow;
   return NextResponse.json(rowToPlan(row), { status: 201 });
 }

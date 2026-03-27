@@ -1,13 +1,5 @@
-import { getDb } from './db';
-import type {
-  Drill,
-  Style,
-  AgeGroup,
-  QuarterlyTheme,
-  PlanPhase,
-  DrillFocus,
-  QUARTERLY_THEMES,
-} from './types';
+import { drillsDb } from './db';
+import type { Drill, Style, AgeGroup, QuarterlyTheme, PlanPhase, DrillFocus } from './types';
 
 // ─── Quarter helpers ──────────────────────────────────────────────────────────
 
@@ -19,31 +11,28 @@ const THEMES: QuarterlyTheme[] = [
 ];
 
 export function getCurrentQuarterlyTheme(): QuarterlyTheme {
-  const month = new Date().getMonth(); // 0-indexed
-  const quarter = Math.floor(month / 3);
-  return THEMES[quarter];
+  return THEMES[Math.floor(new Date().getMonth() / 3)];
 }
 
 export function getQuarterlyThemeForDate(date: Date): QuarterlyTheme {
-  const quarter = Math.floor(date.getMonth() / 3);
-  return THEMES[quarter];
+  return THEMES[Math.floor(date.getMonth() / 3)];
 }
 
-// ─── Phase timing (minutes) by total class duration ──────────────────────────
+// ─── Phase config ─────────────────────────────────────────────────────────────
 
 interface PhaseConfig {
   name: string;
   focus: DrillFocus[];
-  durationRatio: number; // fraction of total class time
+  durationRatio: number;
   maxDrills: number;
   notes: string;
 }
 
-function getPhaseConfigs(duration: number, theme: QuarterlyTheme): PhaseConfig[] {
+function getPhaseConfigs(theme: QuarterlyTheme): PhaseConfig[] {
   return [
     {
       name: 'Warm-Up',
-      focus: ['warm-up', 'footwork', 'conditioning'],
+      focus: ['warm-up', 'footwork'],
       durationRatio: 0.15,
       maxDrills: 2,
       notes: 'Get the body moving, raise heart rate, loosen joints.',
@@ -88,41 +77,25 @@ function getPhaseConfigs(duration: number, theme: QuarterlyTheme): PhaseConfig[]
 
 function themeToDrillFocus(theme: QuarterlyTheme): DrillFocus[] {
   switch (theme) {
-    case 'Footwork & Movement':   return ['footwork'];
-    case 'Defense & Guard':       return ['defense'];
-    case 'Attack & Combinations': return ['attack', 'combination'];
+    case 'Footwork & Movement':    return ['footwork'];
+    case 'Defense & Guard':        return ['defense'];
+    case 'Attack & Combinations':  return ['attack', 'combination'];
     case 'Sparring & Application': return ['sparring', 'combination'];
   }
 }
 
-// ─── Drill selection ─────────────────────────────────────────────────────────
+// ─── Drill selection ──────────────────────────────────────────────────────────
 
-function getDrills(style: Style, focus: DrillFocus[], difficulty: string): Drill[] {
-  const db = getDb();
-
-  const placeholders = focus.map(() => '?').join(', ');
-  const rows = db
-    .prepare(
-      `SELECT * FROM drills
-       WHERE focus IN (${placeholders})
-         AND (style = ? OR style = 'General')
-       ORDER BY RANDOM()`
-    )
-    .all(...focus, style) as Drill[];
-
-  return rows;
+function selectDrills(style: Style, focuses: DrillFocus[], max: number): Drill[] {
+  const candidates = drillsDb.filter(
+    d => focuses.includes(d.focus as DrillFocus) && (d.style === style || d.style === 'General')
+  );
+  // Shuffle and take up to max
+  const shuffled = candidates.sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, max);
 }
 
-function difficultyForAgeGroup(ageGroup: AgeGroup): string {
-  switch (ageGroup) {
-    case 'Kids':   return 'beginner';
-    case 'Teens':  return 'intermediate';
-    case 'Adults': return 'intermediate';
-    case 'Mixed':  return 'beginner';
-  }
-}
-
-// ─── Main generator ──────────────────────────────────────────────────────────
+// ─── Main generator ───────────────────────────────────────────────────────────
 
 export function generatePlan(
   style: Style,
@@ -131,29 +104,18 @@ export function generatePlan(
   focusNotes: string,
   weekStart: string
 ): { phases: PlanPhase[]; theme: QuarterlyTheme; title: string } {
-  const date = new Date(weekStart);
-  const theme = getQuarterlyThemeForDate(date);
-  const difficulty = difficultyForAgeGroup(ageGroup);
-  const phaseConfigs = getPhaseConfigs(classDuration, theme);
+  const theme = getQuarterlyThemeForDate(new Date(weekStart));
+  const phaseConfigs = getPhaseConfigs(theme);
 
-  const phases: PlanPhase[] = phaseConfigs.map((config) => {
-    const allDrills = getDrills(style, config.focus, difficulty);
-    const selected = allDrills.slice(0, config.maxDrills);
-    const duration = Math.round(classDuration * config.durationRatio);
+  const phases: PlanPhase[] = phaseConfigs.map(config => ({
+    name: config.name,
+    duration: Math.round(classDuration * config.durationRatio),
+    drills: selectDrills(style, config.focus, config.maxDrills),
+    notes: config.notes,
+  }));
 
-    return {
-      name: config.name,
-      duration,
-      drills: selected,
-      notes: config.notes,
-    };
-  });
-
-  // Build title
   const weekLabel = new Date(weekStart).toLocaleDateString('en-AU', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
+    day: 'numeric', month: 'short', year: 'numeric',
   });
   const title = `${style} ${ageGroup} — ${theme} (w/c ${weekLabel})`;
 

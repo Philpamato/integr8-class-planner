@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getDb } from '@/lib/db';
+import { plansDb } from '@/lib/db';
 import type { ClassPlan, ClassPlanRow } from '@/lib/types';
 import PlanActions from '@/components/PlanActions';
 
 function rowToPlan(row: ClassPlanRow): ClassPlan {
-  return { ...row, phases: JSON.parse(row.phases) };
+  return { ...row, phases: typeof row.phases === 'string' ? JSON.parse(row.phases) : row.phases };
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -17,8 +17,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function PlanPage({ params }: { params: { id: string } }) {
-  const db = getDb();
-  const row = db.prepare('SELECT * FROM plans WHERE id = ?').get(params.id) as ClassPlanRow | undefined;
+  const row = plansDb.find(Number(params.id));
   if (!row) notFound();
 
   const plan = rowToPlan(row);
@@ -44,7 +43,7 @@ export default function PlanPage({ params }: { params: { id: string } }) {
             <StatusBadge status={plan.status} />
           </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap flex-shrink-0">
           {plan.status === 'draft' && (
             <Link href={`/plans/${plan.id}/edit`} className="btn-secondary text-sm">
               Edit
@@ -56,18 +55,14 @@ export default function PlanPage({ params }: { params: { id: string } }) {
 
       {/* Quarterly theme banner */}
       <div className="bg-palestra/10 border border-palestra/20 rounded-lg px-4 py-3">
-        <div className="text-xs font-semibold text-palestra uppercase tracking-wider mb-0.5">
-          Quarterly Theme
-        </div>
+        <div className="text-xs font-semibold text-palestra uppercase tracking-wider mb-0.5">Quarterly Theme</div>
         <div className="text-sm font-medium text-midnight">{plan.quarterlyTheme}</div>
       </div>
 
       {/* Coach notes */}
       {plan.focusNotes && (
         <div className="card px-5 py-4">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-            Coach Notes
-          </div>
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Coach Notes</div>
           <p className="text-sm text-gray-700 whitespace-pre-line">{plan.focusNotes}</p>
         </div>
       )}
@@ -80,10 +75,8 @@ export default function PlanPage({ params }: { params: { id: string } }) {
               <h2 className="text-white font-semibold text-sm">{phase.name}</h2>
               <span className="text-gray-400 text-xs">{phase.duration} min</span>
             </div>
-
             <div className="px-5 py-4 space-y-3">
               <p className="text-xs text-gray-500 italic">{phase.notes}</p>
-
               {phase.drills.length === 0 ? (
                 <p className="text-sm text-gray-400">No drills assigned for this phase.</p>
               ) : (
@@ -93,15 +86,9 @@ export default function PlanPage({ params }: { params: { id: string } }) {
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <div className="text-sm font-medium text-gray-900">{drill.name}</div>
                         <div className="flex gap-1.5 flex-shrink-0">
-                          <span className="text-xs bg-concrete/30 text-gray-600 px-1.5 py-0.5 rounded">
-                            {drill.style}
-                          </span>
-                          <span className="text-xs bg-concrete/30 text-gray-600 px-1.5 py-0.5 rounded">
-                            {drill.difficulty}
-                          </span>
-                          <span className="text-xs bg-concrete/30 text-gray-600 px-1.5 py-0.5 rounded">
-                            {drill.duration} min
-                          </span>
+                          <span className="text-xs bg-concrete/30 text-gray-600 px-1.5 py-0.5 rounded">{drill.style}</span>
+                          <span className="text-xs bg-concrete/30 text-gray-600 px-1.5 py-0.5 rounded">{drill.difficulty}</span>
+                          <span className="text-xs bg-concrete/30 text-gray-600 px-1.5 py-0.5 rounded">{drill.duration} min</span>
                         </div>
                       </div>
                       <p className="text-xs text-gray-600">{drill.instructions}</p>

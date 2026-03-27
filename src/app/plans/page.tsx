@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { getDb } from '@/lib/db';
-import type { ClassPlanRow } from '@/lib/types';
+import { plansDb } from '@/lib/db';
 
 function StatusBadge({ status }: { status: string }) {
   const cls =
@@ -15,16 +14,11 @@ export default function PlansPage({
 }: {
   searchParams: { location?: string; status?: string; coach?: string };
 }) {
-  const db = getDb();
-
-  let query = 'SELECT * FROM plans WHERE 1=1';
-  const params: string[] = [];
-  if (searchParams.location) { query += ' AND location = ?'; params.push(searchParams.location); }
-  if (searchParams.status)   { query += ' AND status = ?';   params.push(searchParams.status); }
-  if (searchParams.coach)    { query += ' AND coachName = ?'; params.push(searchParams.coach); }
-  query += ' ORDER BY weekStart DESC, createdAt DESC';
-
-  const plans = db.prepare(query).all(...params) as ClassPlanRow[];
+  let plans = plansDb.all();
+  if (searchParams.location) plans = plans.filter(p => p.location === searchParams.location);
+  if (searchParams.status)   plans = plans.filter(p => p.status   === searchParams.status);
+  if (searchParams.coach)    plans = plans.filter(p => p.coachName === searchParams.coach);
+  plans.sort((a, b) => b.weekStart.localeCompare(a.weekStart) || b.createdAt.localeCompare(a.createdAt));
 
   return (
     <div className="space-y-6">
@@ -52,7 +46,6 @@ export default function PlansPage({
         )}
       </form>
 
-      {/* Plans list */}
       {plans.length === 0 ? (
         <div className="card p-10 text-center">
           <p className="text-gray-500 mb-4">No plans found.</p>
@@ -71,11 +64,7 @@ export default function PlansPage({
                 <div className="text-xs text-gray-500 mt-0.5 flex gap-3">
                   <span>{plan.coachName}</span>
                   <span>{plan.location}</span>
-                  <span>
-                    w/c {new Date(plan.weekStart).toLocaleDateString('en-AU', {
-                      day: 'numeric', month: 'short', year: 'numeric'
-                    })}
-                  </span>
+                  <span>w/c {new Date(plan.weekStart).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                 </div>
               </div>
               <div className="flex items-center gap-3 ml-4">

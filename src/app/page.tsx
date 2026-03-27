@@ -1,19 +1,6 @@
 import Link from 'next/link';
-import { getDb } from '@/lib/db';
-import type { ClassPlanRow, Location } from '@/lib/types';
-
-function rowToSummary(row: ClassPlanRow) {
-  return {
-    id: row.id,
-    title: row.title,
-    coachName: row.coachName,
-    location: row.location,
-    style: row.style,
-    status: row.status,
-    weekStart: row.weekStart,
-    submittedAt: row.submittedAt,
-  };
-}
+import { plansDb } from '@/lib/db';
+import type { Location } from '@/lib/types';
 
 function StatusBadge({ status }: { status: string }) {
   const cls =
@@ -24,21 +11,17 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function DashboardPage() {
-  const db = getDb();
-
-  // Plans needing action this fortnight
-  const recentPlans = (
-    db.prepare('SELECT * FROM plans ORDER BY weekStart DESC, createdAt DESC LIMIT 20').all() as ClassPlanRow[]
-  ).map(rowToSummary);
+  const allPlans = plansDb.all()
+    .sort((a, b) => b.weekStart.localeCompare(a.weekStart) || b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 20);
 
   const locations: Location[] = ['Bentleigh', 'Cheltenham'];
-  const pending = recentPlans.filter(p => p.status === 'draft').length;
-  const submitted = recentPlans.filter(p => p.status === 'submitted').length;
-  const approved = recentPlans.filter(p => p.status === 'approved').length;
+  const pending   = allPlans.filter(p => p.status === 'draft').length;
+  const submitted = allPlans.filter(p => p.status === 'submitted').length;
+  const approved  = allPlans.filter(p => p.status === 'approved').length;
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-midnight">Dashboard</h1>
@@ -46,9 +29,7 @@ export default function DashboardPage() {
             Integr8 Class Planner — structured planning for every session.
           </p>
         </div>
-        <Link href="/plans/new" className="btn-primary">
-          + New Plan
-        </Link>
+        <Link href="/plans/new" className="btn-primary">+ New Plan</Link>
       </div>
 
       {/* Stats */}
@@ -69,7 +50,7 @@ export default function DashboardPage() {
 
       {/* Recent plans by location */}
       {locations.map(location => {
-        const plans = recentPlans.filter(p => p.location === location).slice(0, 5);
+        const plans = allPlans.filter(p => p.location === location).slice(0, 5);
         return (
           <section key={location}>
             <h2 className="text-lg font-semibold text-midnight mb-3">{location}</h2>
@@ -98,12 +79,10 @@ export default function DashboardPage() {
         );
       })}
 
-      {recentPlans.length === 0 && (
+      {allPlans.length === 0 && (
         <div className="card p-10 text-center">
           <p className="text-gray-500 mb-4">No class plans yet.</p>
-          <Link href="/plans/new" className="btn-primary">
-            Create your first plan
-          </Link>
+          <Link href="/plans/new" className="btn-primary">Create your first plan</Link>
         </div>
       )}
     </div>
